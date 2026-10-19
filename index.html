@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlideShare Web App with GitHub Backend Simulation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full flex flex-col font-sans antialiased">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2"></div>
+
+    <!-- Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Logo & Brand -->
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="navigateTo('home')">
+                <div class="bg-brand-600 text-white p-2.5 rounded-xl shadow-md flex items-center justify-center">
+                    <i class="fa-solid fa-file-powerpoint text-xl"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight text-slate-900">SlideHub</span>
+                    <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium ml-1.5 border border-slate-200">GitHub Storage</span>
+                </div>
+            </div>
+
+            <!-- Search Bar (Desktop) -->
+            <div class="hidden md:flex flex-1 max-w-md mx-8">
+                <div class="relative w-full">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-search"></i>
+                    </span>
+                    <input type="text" id="global-search" oninput="handleSearch(this.value)" placeholder="Search presentations, tags, or authors..." class="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                </div>
+            </div>
+
+            <!-- Right Actions -->
+            <div class="flex items-center space-x-3">
+                <button onclick="toggleGitHubConfigModal()" class="hidden sm:flex items-center space-x-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl font-medium transition border border-slate-200">
+                    <i class="fa-brands fa-github text-sm"></i>
+                    <span id="gh-status-text">GitHub Connected</span>
+                </button>
+
+                <div id="auth-nav-container" class="flex items-center space-x-3">
+                    <!-- Dynamic Auth Buttons injected by JS -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- View: Home / Feed -->
+        <div id="view-home" class="view-section space-y-8">
+            <!-- Hero Banner -->
+            <div class="bg-gradient-to-r from-brand-600 to-indigo-700 rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 opacity-10 text-9xl">
+                    <i class="fa-solid fa-file-powerpoint"></i>
+                </div>
+                <div class="max-w-2xl relative z-10 space-y-4">
+                    <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight">Share & Discover Professional Presentations</h1>
+                    <p class="text-indigo-100 text-base sm:text-lg">Upload your `.pptx` decks securely backed by GitHub repositories, explore expert insights, and collaborate with creators worldwide.</p>
+                    <div class="pt-2 flex flex-wrap gap-3">
+                        <button onclick="openUploadModal()" class="bg-white text-brand-700 font-semibold px-6 py-3 rounded-xl shadow-md hover:bg-indigo-50 transition flex items-center space-x-2">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>Upload Presentation</span>
+                        </button>
+                        <button onclick="scrollToFeed()" class="bg-indigo-700/60 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-xl transition border border-indigo-500/50">
+                            Explore Feed
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Search Bar -->
+            <div class="md:hidden">
+                <div class="relative w-full">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-search"></i>
+                    </span>
+                    <input type="text" oninput="handleSearch(this.value)" placeholder="Search presentations..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm">
+                </div>
+            </div>
+
+            <!-- Feed Header & Filters -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2" id="feed-section">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Recent Presentations</h2>
+                    <p class="text-slate-500 text-sm">Explore the latest PowerPoint slides uploaded by our community.</p>
+                </div>
+                <div class="flex items-center space-x-2 overflow-x-auto pb-2 sm:pb-0">
+                    <button onclick="filterCategory('all')" id="cat-all" class="category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 text-white shadow-sm transition whitespace-nowrap">All Decks</button>
+                    <button onclick="filterCategory('Technology')" id="cat-Technology" class="category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap">Technology</button>
+                    <button onclick="filterCategory('Business')" id="cat-Business" class="category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap">Business</button>
+                    <button onclick="filterCategory('Education')" id="cat-Education" class="category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap">Education</button>
+                    <button onclick="filterCategory('Design')" id="cat-Design" class="category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap">Design</button>
+                </div>
+            </div>
+
+            <!-- Presentations Grid -->
+            <div id="presentations-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Dynamically populated presentation cards -->
+            </div>
+        </div>
+
+        <!-- View: Presentation Details / Viewer -->
+        <div id="view-details" class="view-section hidden space-y-6">
+            <button onclick="navigateTo('home')" class="inline-flex items-center space-x-2 text-sm font-medium text-slate-600 hover:text-brand-600 transition">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Back to Feed</span>
+            </button>
+            <div id="presentation-detail-content" class="bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-sm space-y-6">
+                <!-- Dynamically populated details -->
+            </div>
+        </div>
+
+        <!-- View: User Profile / My Uploads -->
+        <div id="view-profile" class="view-section hidden space-y-6">
+            <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div class="flex items-center space-x-4">
+                    <div id="profile-avatar" class="w-20 h-20 bg-brand-100 text-brand-600 rounded-2xl flex items-center justify-center text-3xl font-bold shadow-inner">
+                        U
+                    </div>
+                    <div>
+                        <h2 id="profile-name" class="text-2xl font-bold text-slate-900">Username</h2>
+                        <p id="profile-email" class="text-slate-500 text-sm">user@example.com</p>
+                        <div class="mt-2 flex items-center space-x-2">
+                            <span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-medium">
+                                <i class="fa-brands fa-github mr-1"></i> GitHub Storage Active
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="openUploadModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition text-sm flex items-center space-x-2">
+                    <i class="fa-solid fa-upload"></i>
+                    <span>Upload New Deck</span>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <h3 class="text-xl font-bold text-slate-900">My Uploaded Presentations</h3>
+                <div id="my-uploads-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- User's uploads -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-auto py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
+            <p>&copy; 2026 SlideHub. Powered by simulated GitHub API & Storage backend.</p>
+            <div class="flex items-center space-x-6">
+                <a href="#" class="hover:text-slate-800 transition">Privacy Policy</a>
+                <a href="#" class="hover:text-slate-800 transition">Terms of Service</a>
+                <a href="https://github.com" target="_blank" class="hover:text-slate-800 transition"><i class="fa-brands fa-github text-lg"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MODAL: Authentication (Login / Register) -->
+    <div id="auth-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden">
+        <div class="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl border border-slate-100 relative space-y-6">
+            <button onclick="closeAuthModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 bg-brand-50 text-brand-600 rounded-2xl mx-auto flex items-center justify-center text-xl shadow-sm">
+                    <i id="auth-icon" class="fa-solid fa-lock"></i>
+                </div>
+                <h3 id="auth-modal-title" class="text-2xl font-bold text-slate-900">Welcome Back</h3>
+                <p id="auth-modal-subtitle" class="text-slate-500 text-sm">Login to your account to download or upload presentations.</p>
+            </div>
+
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div id="name-field-group" class="hidden space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">Full Name</label>
+                    <input type="text" id="auth-name" placeholder="John Doe" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">Email Address</label>
+                    <input type="email" id="auth-email" required placeholder="name@example.com" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">Password</label>
+                    <input type="password" id="auth-password" required placeholder="••••••••" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+
+                <button type="submit" id="auth-submit-btn" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow-md transition text-sm">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="text-center text-sm">
+                <span id="auth-switch-text" class="text-slate-500">Don't have an account?</span>
+                <button type="button" onclick="toggleAuthMode()" id="auth-switch-btn" class="text-brand-600 font-semibold hover:underline ml-1">Create account</button>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100">
+                <button onclick="simulateGitHubOAuth()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl shadow-md transition text-sm flex items-center justify-center space-x-2">
+                    <i class="fa-brands fa-github text-lg"></i>
+                    <span>Sign in with GitHub OAuth</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Upload Presentation -->
+    <div id="upload-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden">
+        <div class="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl border border-slate-100 relative space-y-6">
+            <button onclick="closeUploadModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            
+            <div class="space-y-1">
+                <h3 class="text-2xl font-bold text-slate-900">Upload Presentation</h3>
+                <p class="text-slate-500 text-sm">Share your `.pptx` file with the SlideHub community. Files are stored on GitHub.</p>
+            </div>
+
+            <form id="upload-form" onsubmit="handleUploadSubmit(event)" class="space-y-4">
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">Presentation Title</label>
+                    <input type="text" id="upload-title" required placeholder="e.g. Modern AI Architecture in 2026" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-700">Category</label>
+                        <select id="upload-category" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="Technology">Technology</option>
+                            <option value="Business">Business</option>
+                            <option value="Education">Education</option>
+                            <option value="Design">Design</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-700">Tags (comma separated)</label>
+                        <input type="text" id="upload-tags" placeholder="AI, Cloud, React" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">Description</label>
+                    <textarea id="upload-desc" rows="3" required placeholder="Brief summary of what this presentation covers..." class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
+                </div>
+
+                <!-- Drag & Drop PPTX File Input -->
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-700">PowerPoint File (.pptx)</label>
+                    <div class="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-brand-500 transition cursor-pointer relative bg-slate-50" onclick="document.getElementById('file-input').click()">
+                        <input type="file" id="file-input" accept=".pptx" required onchange="handleFileSelect(this)" class="hidden">
+                        <div id="file-drop-content" class="space-y-2">
+                            <div class="w-12 h-12 bg-brand-50 text-brand-600 rounded-xl mx-auto flex items-center justify-center text-xl shadow-sm">
+                                <i class="fa-solid fa-file-arrow-up"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-700"><span class="text-brand-600">Click to upload</span> or drag and drop</p>
+                            <p class="text-xs text-slate-400">PowerPoint Presentation (.pptx up to 50MB)</p>
+                        </div>
+                        <div id="file-selected-info" class="hidden items-center justify-center space-x-3 text-emerald-700 bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                            <i class="fa-solid fa-file-powerpoint text-2xl"></i>
+                            <div class="text-left overflow-hidden">
+                                <p id="selected-file-name" class="text-sm font-bold truncate">filename.pptx</p>
+                                <p id="selected-file-size" class="text-xs text-emerald-600">2.4 MB</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" id="upload-submit-btn" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow-md transition text-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Commit & Push to GitHub Storage</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: GitHub Config Simulation -->
+    <div id="github-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden">
+        <div class="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl border border-slate-100 relative space-y-6">
+            <button onclick="toggleGitHubConfigModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            <div class="space-y-2">
+                <div class="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-xl shadow-md">
+                    <i class="fa-brands fa-github"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-900">GitHub Backend Status</h3>
+                <p class="text-slate-500 text-sm">SlideHub uses simulated GitHub API & repository commits to store user databases and `.pptx` assets.</p>
+            </div>
+            <div class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-mono text-slate-600">
+                <div class="flex justify-between items-center">
+                    <span>Repository:</span>
+                    <span class="text-slate-900 font-bold">github.com/slidehub-storage/repo</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span>Branch:</span>
+                    <span class="text-slate-900 font-bold">main</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span>API Endpoint:</span>
+                    <span class="text-emerald-600 font-bold">Connected (REST v3)</span>
+                </div>
+            </div>
+            <button onclick="toggleGitHubConfigModal()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition text-sm">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        /* --- Mock Database & Initial Seed Data --- */
+        let db = {
+            users: JSON.parse(localStorage.getItem('slidehub_users')) || [
+                { id: 'u1', name: 'Dr. Sarah Jenkins', email: 'sarah@tech.edu', password: 'password123' },
+                { id: 'u2', name: 'Alex Rivera', email: 'alex@startup.io', password: 'password123' }
+            ],
+            presentations: JSON.parse(localStorage.getItem('slidehub_presentations')) || [
+                {
+                    id: 'p1',
+                    title: 'Generative AI Architecture & LLMs 2026',
+                    author: 'Dr. Sarah Jenkins',
+                    authorId: 'u1',
+                    category: 'Technology',
+                    tags: ['AI', 'LLM', 'Cloud'],
+                    description: 'Comprehensive overview of transformer architectures, multi-agent frameworks, and vector database optimization.',
+                    fileName: 'gen_ai_architecture_2026.pptx',
+                    fileSize: '4.8 MB',
+                    downloads: 142,
+                    createdAt: '2026-03-10',
+                    githubCommit: 'a1b2c3d'
+                },
+                {
+                    id: 'p2',
+                    title: 'Venture Capital Pitch Deck Blueprint',
+                    author: 'Alex Rivera',
+                    authorId: 'u2',
+                    category: 'Business',
+                    tags: ['Startup', 'Fintech', 'Pitch'],
+                    description: 'The exact slide framework used to secure Series A funding. Includes financial projections and market sizing charts.',
+                    fileName: 'vc_pitch_blueprint_v2.pptx',
+                    fileSize: '2.1 MB',
+                    downloads: 289,
+                    createdAt: '2026-03-12',
+                    githubCommit: 'f8e7d6c'
+                },
+                {
+                    id: 'p3',
+                    title: 'Modern UI/UX Design Systems in Figma',
+                    author: 'Dr. Sarah Jenkins',
+                    authorId: 'u1',
+                    category: 'Design',
+                    tags: ['UI/UX', 'Figma', 'Design'],
+                    description: 'Mastering atomic design principles, token variables, and scalable component libraries for enterprise products.',
+                    fileName: 'design_systems_masterclass.pptx',
+                    fileSize: '6.5 MB',
+                    downloads: 95,
+                    createdAt: '2026-03-14',
+                    githubCommit: '9b8a7f6'
+                }
+            ],
+            currentUser: JSON.parse(localStorage.getItem('slidehub_current_user')) || null
+        };
+
+        let currentCategoryFilter = 'all';
+        let currentSearchQuery = '';
+        let authMode = 'login'; // 'login' or 'register'
+        let selectedFileObject = null;
+
+        /* --- Initialization --- */
+        window.onload = function() {
+            renderAuthNav();
+            renderPresentations();
+        };
+
+        function saveState() {
+            localStorage.setItem('slidehub_users', JSON.stringify(db.users));
+            localStorage.setItem('slidehub_presentations', JSON.stringify(db.presentations));
+            localStorage.setItem('slidehub_current_user', JSON.stringify(db.currentUser));
+        }
+
+        /* --- Navigation & View Switching --- */
+        function navigateTo(viewName, paramId = null) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            if (viewName === 'home') {
+                document.getElementById('view-home').classList.remove('hidden');
+                renderPresentations();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else if (viewName === 'details') {
+                document.getElementById('view-details').classList.remove('hidden');
+                renderPresentationDetails(paramId);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else if (viewName === 'profile') {
+                if (!db.currentUser) {
+                    showToast('Please login to view your profile.', 'error');
+                    openAuthModal('login');
+                    return;
+                }
+                document.getElementById('view-profile').classList.remove('hidden');
+                renderProfile();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function scrollToFeed() {
+            document.getElementById('feed-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        /* --- Toast Notifications --- */
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-slate-900 text-white' : 'bg-rose-600 text-white';
+            const icon = type === 'success' ? 'fa-circle-check text-emerald-400' : 'fa-circle-exclamation text-rose-200';
+            
+            toast.className = `${bgClass} px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 text-sm font-medium transform translate-y-2 opacity-0 transition-all duration-300`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-lg"></i><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 20);
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        /* --- Authentication UI & Handlers --- */
+        function renderAuthNav() {
+            const container = document.getElementById('auth-nav-container');
+            if (db.currentUser) {
+                container.innerHTML = `
+                    <button onclick="navigateTo('profile')" class="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-3.5 py-2 rounded-xl text-sm font-semibold transition border border-slate-200">
+                        <div class="w-6 h-6 bg-brand-600 text-white rounded-lg flex items-center justify-center text-xs font-bold">
+                            ${db.currentUser.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span class="max-w-[100px] truncate">${db.currentUser.name}</span>
+                    </button>
+                    <button onclick="handleLogout()" class="text-slate-400 hover:text-rose-600 p-2 transition" title="Logout">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-base"></i>
+                    </button>
+                `;
+            } else {
+                container.innerHTML = `
+                    <button onclick="openAuthModal('login')" class="text-slate-700 hover:text-brand-600 px-3 py-2 text-sm font-semibold transition">Sign In</button>
+                    <button onclick="openAuthModal('register')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition">Register</button>
+                `;
+            }
+        }
+
+        function openAuthModal(mode = 'login') {
+            authMode = mode;
+            const title = document.getElementById('auth-modal-title');
+            const subtitle = document.getElementById('auth-modal-subtitle');
+            const submitBtn = document.getElementById('auth-submit-btn');
+            const nameGroup = document.getElementById('name-field-group');
+            const switchText = document.getElementById('auth-switch-text');
+            const switchBtn = document.getElementById('auth-switch-btn');
+            const icon = document.getElementById('auth-icon');
+
+            if (mode === 'login') {
+                title.innerText = 'Welcome Back';
+                subtitle.innerText = 'Login to your account to download or upload presentations.';
+                submitBtn.innerText = 'Sign In';
+                nameGroup.classList.add('hidden');
+                document.getElementById('auth-name').required = false;
+                switchText.innerText = "Don't have an account?";
+                switchBtn.innerText = 'Create account';
+                icon.className = 'fa-solid fa-lock';
+            } else {
+                title.innerText = 'Create New Account';
+                subtitle.innerText = 'Register on SlideHub to start sharing & downloading .pptx decks.';
+                submitBtn.innerText = 'Register Account';
+                nameGroup.classList.remove('hidden');
+                document.getElementById('auth-name').required = true;
+                switchText.innerText = "Already have an account?";
+                switchBtn.innerText = 'Sign in';
+                icon.className = 'fa-solid fa-user-plus';
+            }
+
+            document.getElementById('auth-modal').classList.remove('hidden');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('auth-modal').classList.add('hidden');
+            document.getElementById('auth-form').reset();
+        }
+
+        function toggleAuthMode() {
+            openAuthModal(authMode === 'login' ? 'register' : 'login');
+        }
+
+        function handleAuthSubmit(event) {
+            event.preventDefault();
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const name = document.getElementById('auth-name').value.trim();
+
+            if (authMode === 'register') {
+                const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+                if (existing) {
+                    showToast('Email is already registered. Please login.', 'error');
+                    return;
+                }
+                const newUser = {
+                    id: 'u_' + Date.now(),
+                    name: name || email.split('@')[0],
+                    email: email,
+                    password: password
+                };
+                db.users.push(newUser);
+                db.currentUser = newUser;
+                saveState();
+                closeAuthModal();
+                renderAuthNav();
+                showToast(`Account created successfully! Welcome, ${newUser.name}.`);
+            } else {
+                const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+                if (!user) {
+                    showToast('Invalid email or password.', 'error');
+                    return;
+                }
+                db.currentUser = user;
+                saveState();
+                closeAuthModal();
+                renderAuthNav();
+                showToast(`Welcome back, ${user.name}!`);
+            }
+        }
+
+        function simulateGitHubOAuth() {
+            const ghUser = {
+                id: 'gh_' + Math.floor(Math.random() * 10000),
+                name: 'GitHub Developer',
+                email: 'dev@github.user',
+                password: 'oauth_dummy'
+            };
+            if (!db.users.some(u => u.email === ghUser.email)) {
+                db.users.push(ghUser);
+            }
+            db.currentUser = ghUser;
+            saveState();
+            closeAuthModal();
+            renderAuthNav();
+            showToast('Successfully authenticated via GitHub OAuth!');
+        }
+
+        function handleLogout() {
+            db.currentUser = null;
+            saveState();
+            renderAuthNav();
+            navigateTo('home');
+            showToast('Logged out successfully.');
+        }
+
+        /* --- Feed & Filtering --- */
+        function filterCategory(category) {
+            currentCategoryFilter = category;
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.className = 'category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap';
+            });
+            const activeBtn = document.getElementById('cat-' + category);
+            if (activeBtn) {
+                activeBtn.className = 'category-btn px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 text-white shadow-sm transition whitespace-nowrap';
+            }
+            renderPresentations();
+        }
+
+        function handleSearch(query) {
+            currentSearchQuery = query.toLowerCase();
+            renderPresentations();
+        }
+
+        function renderPresentations() {
+            const grid = document.getElementById('presentations-grid');
+            let filtered = db.presentations.filter(p => {
+                const matchesCategory = currentCategoryFilter === 'all' || p.category === currentCategoryFilter;
+                const matchesSearch = p.title.toLowerCase().includes(currentSearchQuery) ||
+                                      p.author.toLowerCase().includes(currentSearchQuery) ||
+                                      p.tags.some(t => t.toLowerCase().includes(currentSearchQuery)) ||
+                                      p.description.toLowerCase().includes(currentSearchQuery);
+                return matchesCategory && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full py-16 text-center space-y-3 bg-white border border-slate-200 rounded-3xl">
+                        <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl mx-auto flex items-center justify-center text-2xl">
+                            <i class="fa-solid fa-folder-open"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-800">No presentations found</h3>
+                        <p class="text-slate-400 text-sm">Try adjusting your search query or filter category.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = filtered.map(p => `
+                <div class="bg-white border border-slate-200 hover:border-brand-500/50 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 group">
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs bg-brand-50 text-brand-700 font-semibold px-3 py-1 rounded-full border border-brand-100">${p.category}</span>
+                            <span class="text-xs text-slate-400 font-medium flex items-center space-x-1">
+                                <i class="fa-solid fa-download"></i>
+                                <span>${p.downloads}</span>
+                            </span>
+                        </div>
+                        <h3 onclick="navigateTo('details', '${p.id}')" class="text-lg font-bold text-slate-900 group-hover:text-brand-600 transition cursor-pointer line-clamp-2">${p.title}</h3>
+                        <p class="text-slate-500 text-xs line-clamp-2">${p.description}</p>
+                    </div>
+
+                    <div class="space-y-4 pt-2 border-t border-slate-100">
+                        <div class="flex flex-wrap gap-1.5">
+                            ${p.tags.map(t => `<span class="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-md font-medium">#${t}</span>`).join('')}
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-7 h-7 bg-slate-200 text-slate-700 rounded-full flex items-center justify-center text-xs font-bold">
+                                    ${p.author.charAt(0).toUpperCase()}
+                                </div>
+                                <span class="text-xs font-semibold text-slate-700 truncate max-w-[120px]">${p.author}</span>
+                            </div>
+                            <button onclick="navigateTo('details', '${p.id}')" class="bg-slate-900 hover:bg-brand-600 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm">
+                                View Deck
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /* --- Presentation Details & Download Handler --- */
+        function renderPresentationDetails(id) {
+            const p = db.presentations.find(item => item.id === id);
+            const container = document.getElementById('presentation-detail-content');
+            if (!p) {
+                container.innerHTML = `<p class="text-center text-slate-500">Presentation not found.</p>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200">
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs bg-brand-50 text-brand-700 font-semibold px-3 py-1 rounded-full border border-brand-100">${p.category}</span>
+                            <span class="text-xs text-slate-400 font-medium">Uploaded on ${p.createdAt}</span>
+                        </div>
+                        <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900">${p.title}</h1>
+                        <p class="text-slate-600 text-sm">Created by <strong class="text-slate-900">${p.author}</strong></p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="handleDownload('${p.id}')" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-3 rounded-xl shadow-md transition text-sm flex items-center space-x-2">
+                            <i class="fa-solid fa-download"></i>
+                            <span>Download .pptx (${p.fileSize})</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Simulated PowerPoint Viewer Canvas / Preview -->
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Slide Deck Preview</h3>
+                    <div class="bg-slate-900 text-white rounded-2xl aspect-[16/9] p-8 flex flex-col justify-between shadow-xl relative overflow-hidden border border-slate-800">
+                        <div class="absolute -right-12 -top-12 opacity-10 text-9xl">
+                            <i class="fa-solid fa-file-powerpoint"></i>
+                        </div>
+                        <div class="space-y-2 relative z-10">
+                            <span class="text-xs bg-brand-500/20 text-brand-300 px-3 py-1 rounded-full font-mono">Slide 1 of 12</span>
+                            <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight">${p.title}</h2>
+                        </div>
+                        <div class="space-y-3 relative z-10">
+                            <p class="text-slate-300 text-sm max-w-xl">${p.description}</p>
+                            <div class="flex items-center space-x-4 text-xs text-slate-400 pt-4 border-t border-slate-800">
+                                <span><i class="fa-solid fa-user mr-1.5"></i>${p.author}</span>
+                                <span><i class="fa-solid fa-file mr-1.5"></i>${p.fileName}</span>
+                                <span><i class="fa-brands fa-github mr-1.5"></i>Commit: ${p.githubCommit}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+                    <div class="md:col-span-2 space-y-4">
+                        <h3 class="text-lg font-bold text-slate-900">About this Presentation</h3>
+                        <p class="text-slate-600 text-sm leading-relaxed">${p.description}</p>
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            ${p.tags.map(t => `<span class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-lg font-medium">#${t}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                        <h3 class="text-sm font-bold text-slate-900">GitHub Storage Stats</h3>
+                        <div class="space-y-3 text-xs text-slate-600">
+                            <div class="flex justify-between">
+                                <span>Total Downloads:</span>
+                                <span class="font-bold text-slate-900">${p.downloads}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>File Format:</span>
+                                <span class="font-bold text-slate-900">Microsoft PowerPoint (.pptx)</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Storage Repo:</span>
+                                <span class="font-bold text-brand-600">slidehub-storage</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleDownload(presentationId) {
+            if (!db.currentUser) {
+                showToast('Authentication required! Please login or create an account to download presentations.', 'error');
+                openAuthModal('login');
+                return;
+            }
+
+            const p = db.presentations.find(item => item.id === presentationId);
+            if (p) {
+                p.downloads += 1;
+                saveState();
+                
+                // Trigger simulated file download
+                const blob = new Blob([`Simulated PowerPoint binary content for: ${p.title}\nUploaded by: ${p.author}`], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = p.fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast(`Successfully downloaded "${p.fileName}"!`);
+                if (document.getElementById('view-details').classList.contains('hidden') === false) {
+                    renderPresentationDetails(presentationId);
+                } else {
+                    renderPresentations();
+                }
+            }
+        }
+
+        /* --- Upload Modal & Handling (.pptx only) --- */
+        function openUploadModal() {
+            if (!db.currentUser) {
+                showToast('Please login to upload presentations.', 'error');
+                openAuthModal('login');
+                return;
+            }
+            document.getElementById('upload-modal').classList.remove('hidden');
+        }
+
+        function closeUploadModal() {
+            document.getElementById('upload-modal').classList.add('hidden');
+            document.getElementById('upload-form').reset();
+            document.getElementById('file-drop-content').classList.remove('hidden');
+            document.getElementById('file-selected-info').classList.add('hidden');
+            selectedFileObject = null;
+        }
+
+        function handleFileSelect(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                if (!file.name.endsWith('.pptx')) {
+                    showToast('Only .pptx files are allowed.', 'error');
+                    input.value = '';
+                    return;
+                }
+                selectedFileObject = file;
+                document.getElementById('file-drop-content').classList.add('hidden');
+                const info = document.getElementById('file-selected-info');
+                info.classList.remove('hidden');
+                info.classList.add('flex');
+                document.getElementById('selected-file-name').innerText = file.name;
+                document.getElementById('selected-file-size').innerText = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            }
+        }
+
+        function handleUploadSubmit(event) {
+            event.preventDefault();
+            if (!db.currentUser) {
+                showToast('Authentication expired. Please login again.', 'error');
+                openAuthModal('login');
+                return;
+            }
+
+            const title = document.getElementById('upload-title').value.trim();
+            const category = document.getElementById('upload-category').value;
+            const tagsInput = document.getElementById('upload-tags').value;
+            const description = document.getElementById('upload-desc').value.trim();
+
+            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0) : [category];
+            const fileName = selectedFileObject ? selectedFileObject.name : 'presentation_deck.pptx';
+            const fileSize = selectedFileObject ? (selectedFileObject.size / (1024 * 1024)).toFixed(1) + ' MB' : '3.2 MB';
+
+            const newPresentation = {
+                id: 'p_' + Date.now(),
+                title: title,
+                author: db.currentUser.name,
+                authorId: db.currentUser.id,
+                category: category,
+                tags: tags,
+                description: description,
+                fileName: fileName,
+                fileSize: fileSize,
+                downloads: 0,
+                createdAt: new Date().toISOString().split('T')[0],
+                githubCommit: Math.random().toString(16).substring(2, 9)
+            };
+
+            db.presentations.unshift(newPresentation);
+            saveState();
+            closeUploadModal();
+            renderPresentations();
+            showToast('Presentation successfully committed & pushed to GitHub storage!');
+        }
+
+        /* --- User Profile View --- */
+        function renderProfile() {
+            if (!db.currentUser) return;
+            document.getElementById('profile-name').innerText = db.currentUser.name;
+            document.getElementById('profile-email').innerText = db.currentUser.email;
+            document.getElementById('profile-avatar').innerText = db.currentUser.name.charAt(0).toUpperCase();
+
+            const myUploadsGrid = document.getElementById('my-uploads-grid');
+            const myDecks = db.presentations.filter(p => p.authorId === db.currentUser.id || p.author === db.currentUser.name);
+
+            if (myDecks.length === 0) {
+                myUploadsGrid.innerHTML = `
+                    <div class="col-span-full py-12 text-center space-y-2 bg-white border border-slate-200 rounded-3xl">
+                        <p class="text-slate-500 text-sm">You haven't uploaded any presentations yet.</p>
+                        <button onclick="openUploadModal()" class="text-brand-600 font-semibold text-sm hover:underline">Upload your first .pptx deck</button>
+                    </div>
+                `;
+                return;
+            }
+
+            myUploadsGrid.innerHTML = myDecks.map(p => `
+                <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs bg-brand-50 text-brand-700 font-semibold px-3 py-1 rounded-full border border-brand-100">${p.category}</span>
+                            <span class="text-xs text-slate-400"><i class="fa-solid fa-download mr-1"></i>${p.downloads}</span>
+                        </div>
+                        <h4 class="font-bold text-slate-900 line-clamp-1 cursor-pointer hover:text-brand-600" onclick="navigateTo('details', '${p.id}')">${p.title}</h4>
+                        <p class="text-slate-500 text-xs line-clamp-2">${p.description}</p>
+                    </div>
+                    <div class="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-500">
+                        <span><i class="fa-brands fa-github mr-1"></i>${p.githubCommit}</span>
+                        <button onclick="navigateTo('details', '${p.id}')" class="text-brand-600 font-semibold hover:underline">View Deck</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
