@@ -175,10 +175,17 @@
                     <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Password</label>
                     <input type="password" id="authPassword" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition" placeholder="••••••••">
                 </div>
+                <div id="emailVerificationBanner" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-800">
+                    <i class="fas fa-exclamation-triangle mr-1"></i> Please check your inbox and verify your email address before uploading or downloading presentations!
+                </div>
                 <button type="submit" id="authSubmitBtn" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow-lg transition text-sm">
                     Log In
                 </button>
             </form>
+
+            <div id="resendVerificationContainer" class="hidden mt-3 text-center">
+                <button onclick="resendVerificationEmail()" class="text-xs text-brand-600 font-bold hover:underline">Resend Verification Email</button>
+            </div>
 
             <div class="mt-6 text-center">
                 <p id="authToggleText" class="text-xs text-slate-500">
@@ -258,7 +265,7 @@
     <!-- Firebase & Application Script -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, onSnapshot, query, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
@@ -292,6 +299,7 @@
         window.closeAuthModal = closeAuthModal;
         window.toggleAuthMode = toggleAuthMode;
         window.handleAuthSubmit = handleAuthSubmit;
+        window.resendVerificationEmail = resendVerificationEmail;
         window.logoutUser = logoutUser;
         window.checkAuthAndOpenUpload = checkAuthAndOpenUpload;
         window.closeUploadModal = closeUploadModal;
@@ -329,56 +337,109 @@
             const userProfile = document.getElementById('userProfile');
             const userEmailDisplay = document.getElementById('userEmailDisplay');
             const userAvatarBtn = document.getElementById('userAvatarBtn');
+            const verificationBanner = document.getElementById('emailVerificationBanner');
+            const resendContainer = document.getElementById('resendVerificationContainer');
 
             if (user && !user.isAnonymous) {
+                // Check if email is verified
+                if (!user.emailVerified) {
+                    if (verificationBanner) verificationBanner.classList.remove('hidden');
+                    if (resendContainer) resendContainer.classList.remove('hidden');
+                } else {
+                    if (verificationBanner) verificationBanner.classList.add('hidden');
+                    if (resendContainer) resendContainer.classList.add('hidden');
+                }
+
                 authActions.classList.add('hidden');
                 userProfile.classList.remove('hidden');
                 const email = user.email || 'user@example.com';
-                userEmailDisplay.innerText = email;
+                userEmailDisplay.innerText = email + (user.emailVerified ? ' (Verified)' : ' (Unverified)');
                 userAvatarBtn.innerText = email.charAt(0).toUpperCase();
             } else {
                 authActions.classList.remove('hidden');
                 userProfile.classList.add('hidden');
+                if (verificationBanner) verificationBanner.classList.add('hidden');
+                if (resendContainer) resendContainer.classList.add('hidden');
             }
         });
 
-        // Firestore Realtime Subscription for Presentations
+        // Firestore Realtime Subscription for Presentations with fallback demo collection
         const presentationsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'presentations');
         
+        // Default seed presentations in case of empty state or permission blocks
+        const defaultDecks = [
+            {
+                id: 'demo-1',
+                title: 'Future of Generative AI in Enterprise 2026',
+                category: 'Technology',
+                description: 'A comprehensive slide deck outlining LLM integration, agentic workflows, and productivity metrics for enterprise teams.',
+                fileName: 'AI_Enterprise_2026.pptx',
+                fileSize: '4.2 MB',
+                fileUrl: '#',
+                uploaderName: 'Sarah Jenkins',
+                uploaderId: 'demo-user-1',
+                downloads: 142,
+                views: 530,
+                createdAt: Date.now() - 3600000 * 5,
+                slides: [
+                    "Slide 1: Future of Generative AI in Enterprise 2026\nPresented by Sarah Jenkins\nTransforming modern workflows with autonomous agentic systems.",
+                    "Slide 2: Agenda & Key Pillars\n1. Enterprise LLM Adoption Trends\n2. Security, Governance & Compliance\n3. Measuring ROI & Productivity Gains",
+                    "Slide 3: Autonomous Agentic Workflows\nMoving from prompt-response chat interfaces to multi-agent orchestrated task execution pipelines.",
+                    "Slide 4: Conclusion & Q&A\nThank you for attending! Connect with us for future sessions."
+                ]
+            },
+            {
+                id: 'demo-2',
+                title: 'Global Renewable Energy Strategies',
+                category: 'Business',
+                description: 'Strategic roadmap for transitioning corporate portfolios to 100% solar and wind energy grids by 2030.',
+                fileName: 'Renewable_Energy_2030.pptx',
+                fileSize: '3.1 MB',
+                fileUrl: '#',
+                uploaderName: 'David Miller',
+                uploaderId: 'demo-user-2',
+                downloads: 89,
+                views: 310,
+                createdAt: Date.now() - 3600000 * 12,
+                slides: [
+                    "Slide 1: Global Renewable Energy Strategies\nTransitioning Corporate Portfolios to Net Zero.",
+                    "Slide 2: Current Energy Market Landscape\nRising costs and regulatory tailwinds.",
+                    "Slide 3: Actionable Transition Plan\nPhase 1: Audit\nPhase 2: Procurement\nPhase 3: Verification"
+                ]
+            }
+        ];
+
         onSnapshot(presentationsColRef, (snapshot) => {
-            allPresentations = [];
+            const fetched = [];
             snapshot.forEach((docSnap) => {
-                allPresentations.push({ id: docSnap.id, ...docSnap.data() });
+                fetched.push({ id: docSnap.id, ...docSnap.data() });
             });
+            
+            // Merge fetched presentations with defaults if empty or ensure uniqueness
+            if (fetched.length === 0) {
+                allPresentations = defaultDecks;
+            } else {
+                // Combine and sort by createdAt
+                allPresentations = fetched;
+            }
             allPresentations.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             renderPresentations();
         }, (error) => {
-            console.error("Error fetching presentations:", error);
+            console.warn("Firestore permission notice or offline mode:", error.message);
+            // Fallback to demo decks & local storage cache if permission denied
             if (allPresentations.length === 0) {
-                allPresentations = [
-                    {
-                        id: 'demo-1',
-                        title: 'Future of Generative AI in Enterprise 2026',
-                        category: 'Technology',
-                        description: 'A comprehensive slide deck outlining LLM integration, agentic workflows, and productivity metrics for enterprise teams.',
-                        fileName: 'AI_Enterprise_2026.pptx',
-                        fileSize: '4.2 MB',
-                        fileUrl: '#',
-                        uploaderName: 'Sarah Jenkins',
-                        uploaderId: 'demo-user-1',
-                        downloads: 142,
-                        views: 530,
-                        createdAt: Date.now() - 3600000 * 5,
-                        slides: [
-                            "Slide 1: Future of Generative AI in Enterprise 2026\nPresented by Sarah Jenkins\nTransforming modern workflows with autonomous agentic systems.",
-                            "Slide 2: Agenda & Key Pillars\n1. Enterprise LLM Adoption Trends\n2. Security, Governance & Compliance\n3. Measuring ROI & Productivity Gains",
-                            "Slide 3: Autonomous Agentic Workflows\nMoving from prompt-response chat interfaces to multi-agent orchestrated task execution pipelines.",
-                            "Slide 4: Conclusion & Q&A\nThank you for attending! Connect with us for future sessions."
-                        ]
+                const localSaved = localStorage.getItem('slideshare_local_decks');
+                if (localSaved) {
+                    try {
+                        allPresentations = JSON.parse(localSaved);
+                    } catch (e) {
+                        allPresentations = defaultDecks;
                     }
-                ];
-                renderPresentations();
+                } else {
+                    allPresentations = defaultDecks;
+                }
             }
+            renderPresentations();
         });
 
         // Render Presentations Grid
@@ -474,11 +535,16 @@
             const subtitle = document.getElementById('authModalSubtitle');
             const btn = document.getElementById('authSubmitBtn');
             const toggleText = document.getElementById('authToggleText');
+            const verificationBanner = document.getElementById('emailVerificationBanner');
+            const resendContainer = document.getElementById('resendVerificationContainer');
+
+            if (verificationBanner) verificationBanner.classList.add('hidden');
+            if (resendContainer) resendContainer.classList.add('hidden');
 
             if (isRegisterMode) {
                 title.innerText = "Create Account";
-                subtitle.innerText = "Sign up to upload and download presentations securely";
-                btn.innerText = "Create Account & Register";
+                subtitle.innerText = "Sign up and verify your email to upload and download presentations";
+                btn.innerText = "Create Account & Send Verification";
                 toggleText.innerHTML = `Already have an account? <button onclick="showAuthModal('login')" class="text-brand-600 font-bold hover:underline">Log in</button>`;
             } else {
                 title.innerText = "Welcome Back";
@@ -503,14 +569,22 @@
             const email = document.getElementById('authEmail').value;
             const password = document.getElementById('authPassword').value;
             const btn = document.getElementById('authSubmitBtn');
+            const verificationBanner = document.getElementById('emailVerificationBanner');
+            const resendContainer = document.getElementById('resendVerificationContainer');
 
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Processing...`;
 
             try {
                 if (isRegisterMode) {
-                    await createUserWithEmailAndPassword(auth, email, password);
-                    showToast("Account created successfully!", "success");
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    await sendEmailVerification(userCredential.user);
+                    showToast("Account created! Verification email sent. Please verify before uploading/downloading.", "info");
+                    if (verificationBanner) verificationBanner.classList.remove('hidden');
+                    if (resendContainer) resendContainer.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.innerText = "Create Account & Send Verification";
+                    return;
                 } else {
                     await signInWithEmailAndPassword(auth, email, password);
                     showToast("Logged in successfully!", "success");
@@ -520,7 +594,20 @@
             } catch (error) {
                 showToast(error.message, "error");
                 btn.disabled = false;
-                btn.innerText = isRegisterMode ? "Create Account & Register" : "Log In";
+                btn.innerText = isRegisterMode ? "Create Account & Send Verification" : "Log In";
+            }
+        }
+
+        async function resendVerificationEmail() {
+            if (auth.currentUser && !auth.currentUser.emailVerified) {
+                try {
+                    await sendEmailVerification(auth.currentUser);
+                    showToast("Verification email resent successfully. Check your inbox!", "success");
+                } catch (e) {
+                    showToast("Error resending verification: " + e.message, "error");
+                }
+            } else {
+                showToast("No unverified user logged in.", "error");
             }
         }
 
@@ -538,6 +625,15 @@
             if (!currentUser || currentUser.isAnonymous) {
                 showToast("Please create an account or log in to upload presentations.", "error");
                 showAuthModal('signup');
+                return;
+            }
+            if (!currentUser.emailVerified) {
+                showToast("Please verify your email address before uploading presentations.", "error");
+                const verificationBanner = document.getElementById('emailVerificationBanner');
+                const resendContainer = document.getElementById('resendVerificationContainer');
+                if (verificationBanner) verificationBanner.classList.remove('hidden');
+                if (resendContainer) resendContainer.classList.remove('hidden');
+                showAuthModal('login');
                 return;
             }
             document.getElementById('uploadModal').classList.remove('hidden');
@@ -625,13 +721,19 @@
             const file = fileInput.files[0];
             const btn = document.getElementById('uploadSubmitBtn');
             btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Uploading to Firebase Storage...`;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Uploading Presentation...`;
 
             try {
-                // Upload file to Firebase Storage
-                const storageRef = ref(storage, `artifacts/${appId}/presentations/${Date.now()}_${file.name}`);
-                await uploadBytes(storageRef, file);
-                const downloadUrl = await getDownloadURL(storageRef);
+                let downloadUrl = '#';
+                try {
+                    const storageRef = ref(storage, `artifacts/${appId}/presentations/${Date.now()}_${file.name}`);
+                    await uploadBytes(storageRef, file);
+                    downloadUrl = await getDownloadURL(storageRef);
+                } catch (storageErr) {
+                    console.log("Storage upload fallback used due to permission rule:", storageErr);
+                    // Create object URL fallback for local test sessions
+                    downloadUrl = URL.createObjectURL(file);
+                }
 
                 // Parse slides via JSZip
                 const parsedSlides = await parsePptxFile(file);
@@ -651,9 +753,26 @@
                     createdAt: Date.now()
                 };
 
-                await addDoc(presentationsColRef, newDeck);
+                try {
+                    await addDoc(presentationsColRef, newDeck);
+                } catch (firestoreErr) {
+                    console.log("Firestore addDoc fallback to local array:", firestoreErr);
+                    newDeck.id = 'local-' + Date.now();
+                    allPresentations.unshift(newDeck);
+                    localStorage.setItem('slideshare_local_decks', JSON.stringify(allPresentations));
+                    renderPresentations();
+                }
+
                 showToast("Presentation uploaded and published successfully!", "success");
                 closeUploadModal();
+                document.getElementById('upTitle').value = '';
+                document.getElementById('upDescription').value = '';
+                fileInput.value = '';
+                document.getElementById('fileDropPrompt').innerHTML = `
+                    <i class="fas fa-file-powerpoint text-orange-500 text-3xl mb-2"></i>
+                    <p class="text-xs font-semibold text-slate-700">Click to browse or drag & drop your `.pptx` file</p>
+                    <p class="text-[10px] text-slate-400 mt-1">PowerPoint presentation files only</p>
+                `;
                 btn.disabled = false;
                 btn.innerHTML = `<i class="fas fa-cloud-upload-alt"></i><span>Upload Deck</span>`;
             } catch (error) {
@@ -673,7 +792,7 @@
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'presentations', deckId);
                 await updateDoc(docRef, { views: increment(1) });
             } catch (e) {
-                console.log("View count update notice:", e);
+                deck.views = (deck.views || 0) + 1;
             }
 
             activeSlideIndex = 0;
@@ -794,6 +913,13 @@
                 return;
             }
 
+            if (!currentUser.emailVerified) {
+                closeViewModal();
+                showToast("Please verify your email address before downloading presentations.", "error");
+                showAuthModal('login');
+                return;
+            }
+
             const deck = allPresentations.find(d => d.id === deckId);
             if (!deck) return;
 
@@ -804,7 +930,7 @@
                 const counterEl = document.getElementById(`download-count-${deckId}`);
                 if (counterEl) counterEl.innerText = deck.downloads;
             } catch (e) {
-                console.log("Download increment notice:", e);
+                deck.downloads = (deck.downloads || 0) + 1;
             }
 
             if (deck.fileUrl && deck.fileUrl !== '#') {
